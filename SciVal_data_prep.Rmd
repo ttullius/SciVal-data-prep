@@ -1,5 +1,5 @@
 ---
-title: "SciVal data prep"
+title: "SciVal data prep with widgets"
 author: "Tom Tullius"
 date: "`r Sys.Date()`"
 output: 
