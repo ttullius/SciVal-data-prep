@@ -12,15 +12,42 @@ runtime: shiny
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## Introduction
+
+These code chunks process raw trainee data to produce a spreadsheet file (csv format) that can be used in the SciVal Shiny dashboard app.
+
+Input to all code chunks is a comma-separated value (csv) format spreadsheet file.\
+
+
+### Step 1: 
+Combine a csv file containing trainee metadata with a csv file containing the trainee name and Scopus ID for each trainee. 
+
+Associating a Scopus ID with each trainee allows the SciVal Shiny dashboard app to query the SciVal database and retrieve publication data for trainees.
+
+The resulting file can be named and downloaded as a csv file to your computer for subsequent use.
 
 ```{r}
 
 library (dplyr)
+library (tidyverse)
+
+##########. function to load a file from an interactive file input. #######
+
 
 load_file <- function(path) {
   vroom::vroom(path, delim = ",")
 }
+
+######. end function      ######
+
+
+```
+
+
+
+```{r}
+
+##########. interactive file selection. #########
 
 fileInput("file1",
                 "Choose CSV File with Trainee metadata",
@@ -31,10 +58,11 @@ fileInput("file2",
                 "Choose CSV File with Trainee names and Scopus ID's",
                 accept = ".csv"
       )
-```
+
+DT::dataTableOutput("meta_table")
 
 
-```{r}
+############.  load csv files into dataframes.  ###########
 
 meta_df <- reactive({
   
@@ -49,18 +77,8 @@ ID_df <- reactive({
   
 })
 
-```
 
-
-```{r}
-
-
-#df1<- read.csv(here::here("data", "processed", "2023_03_Bioinformatics_metadata_cleaned.csv"))
-#head(df1)
-
-
-#df2<-read.csv(here::here("data", "processed", "graduated_students_SciVal_cleaned.csv"))
-#head(df2)
+##########.  produce dataframe with Scopus ID's joined to trainee metadata.  #########
 
 df12  <- reactive({
   
@@ -68,12 +86,18 @@ left_join(meta_df(), ID_df(), by = 'Author') |> select(-starts_with("Student"), 
 
 })
 
-df12
+#df12
 
-#write.csv(df12(), file = "BUResearchers_full.csv")
-```
+output$meta_table <- DT::renderDataTable(DT::datatable({
+  
+    df <- df12()
+    df
+    
+  }))
 
-```{r}
+
+#########. download csv file with trainee metadata joined to Scopus ID for each trainee.  ###########
+
 
 downloadHandler(
     filename = function() {
@@ -86,50 +110,90 @@ downloadHandler(
 
 ```
 
+### Step 2.
 
+
+Produce a dataframe with each row containing a trainee name, Scopus ID, and number of papers for each year from 1998-2021.
+
+
+The papers data come from a set of csv files downloaded from SciVal, each including data for up to 75 trainees.
 ```{r}
-library(dplyr)
 
-#df3<-read.csv("1_75_Scholarly_Output_vs_Publication_Year.csv", header = TRUE)
-df3 <- read.csv(here::here("data", "raw", "full_paper_list_outputs","1_75_Scholarly_Output_vs_Publication_Year.csv"))
-head(df3)
 
-#df2<-read.csv("76_150_Scholarly_Output_vs_Publication_Year.csv", header = TRUE)
-df4 <- read.csv(here::here("data", "raw", "full_paper_list_outputs", "76_150_Scholarly_Output_vs_Publication_Year.csv"))
-head(df4)
+##########. interactive file selection. #########
 
-full_df34 <- union(df3, df4)
-head(full_df34)
 
-#df3<-read.csv("150_Scholarly_Output_vs_Publication_Year.csv", header = TRUE)
-df5 <- read.csv(here::here("data", "raw",  "full_paper_list_outputs", "150_Scholarly_Output_vs_Publication_Year.csv"))
-df5
+fileInput("file3",
+                "Choose CSV File with trainees 1 - 75 from SciVal",
+                accept = ".csv"
+      )
 
-full_df345 <- union(full_df34, df5)
-head(full_df345)
-write.csv(full_df345, file = "all_papers_out.csv")
+fileInput("file4",
+                "Choose CSV File with trainees 76 - 150 from SciVal",
+                accept = ".csv"
+      )
+
+fileInput("file5",
+                "Choose CSV File with trainees 150 - 225 from SciVal",
+                accept = ".csv"
+      )
+
+
+DT::dataTableOutput("table")
+
+
+############.  load csv files into dataframes.  ###########
+
+pubs1_df <- reactive({
+  
+  load_file(input$file3$datapath)
+  
+})
+
+
+pubs2_df <- reactive({
+  
+  load_file(input$file4$datapath)
+  
+})
+
+pubs3_df <- reactive({
+  
+  load_file(input$file5$datapath)
+  
+})
+
+##########.  produce a dataframe with with each row containing trainee name, Scopus ID, and number of papers for each year from 1998-2021  #########
+
+full_pubs_df  <- reactive({
+  
+  all_pubs_df <- union(pubs1_df(), pubs2_df()) |>  union(pubs3_df())
+  full_pubs_df <- inner_join(df12(), all_pubs_df, by = 'ID')
+
+})
+
+
+output$table <- DT::renderDataTable(DT::datatable({
+  
+    df <- full_pubs_df()
+    df
+    
+  }))
+       
+
 ```
 
-
-
 ```{r}
-library(dplyr)
-library(tidyverse)
 
-trainees_meta <- read_csv(here::here("/Users/tom/Dropbox (BOSTON UNIVERSITY)/R/SciVal_Shiny/data/BUResearchers_full.csv"))
-trainees_papers <- read.csv(here::here("/Users/tom/Dropbox (BOSTON UNIVERSITY)/R/SciVal_Shiny/data/all_papers_out.csv"))
+#########. download csv file with each row containing trainee name, Scopus ID, and number of papers for each year from 1998-2021.  ###########
 
-#trainees_papers <- select(trainees_papers, -X, -Author, -first, -starts_with("X19"))
-trainees_papers <- select(trainees_papers, -X, -Author, -first,)
-trainees_papers <- trainees_papers |> rename_with(.fn = ~ str_replace(.x, "X", ""),
-            .cols = starts_with("X"))
 
-df_all_papers <- trainees_meta %>% inner_join(trainees_papers, by = 'ID')
-df_all_papers <- select(df_all_papers, -Student_Name, -First)
-df_all_papers <- select(df_all_papers, 1:24)
-as_tibble(df_all_papers)
-
-write_csv(df_all_papers, file = "BUResearchers_meta__papers.csv")
-
+downloadHandler(
+    filename = function() {
+      paste0(tools::file_path_sans_ext(input$file$name), ".csv")
+    },
+    content = function(file) {
+      vroom::vroom_write(full_pubs_df(), file, delim = ",")
+    }
+  )
 ```
-
