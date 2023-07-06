@@ -36,7 +36,7 @@ library(janitor)
 
 
 load_file <- function(path) {
-  vroom::vroom(path, delim = ",")
+  vroom::vroom(path, delim = ",", na = c("-", "NA"))
 }
 
 ######. end function      ######
@@ -67,6 +67,7 @@ DT::dataTableOutput("meta_table")
 
 meta_df <- reactive({
   
+  req(input$file1)
   load_file(input$file1$datapath)
   
 })
@@ -74,6 +75,7 @@ meta_df <- reactive({
 
 ID_df <- reactive({
   
+  req(input$file2)
   load_file(input$file2$datapath)
   
 })
@@ -81,19 +83,20 @@ ID_df <- reactive({
 
 ##########.  produce dataframe with Scopus ID's joined to trainee metadata.  #########
 
-df12  <- reactive({
+meta_id_df  <- reactive({
   
-  df12 <- left_join(meta_df(), ID_df(), by = 'Author') |> select(-starts_with("Student"), -"first") |> rename(fellowship = Tags)
+  meta_id_df <- left_join(meta_df(), ID_df(), by = 'Author') |> select(-starts_with("Student"), -"first") 
+   #meta_id_df <- left_join(meta_df(), ID_df(), by = 'Author') |> select(-starts_with("Student"), -"first") |> rename(fellowship = Tags)
   
-  clean_names(df12)
+  clean_names(meta_id_df)
 
 })
 
 
 output$meta_table <- DT::renderDataTable(DT::datatable({
   
-    df <- df12()
-    df
+    meta_id_df_table <- meta_id_df()
+    meta_id_df_table
     
   }))
 
@@ -106,7 +109,7 @@ downloadHandler(
       paste0(tools::file_path_sans_ext(input$file$name), ".csv")
     },
     content = function(file) {
-      vroom::vroom_write(df12(), file, delim = ",")
+      vroom::vroom_write(meta_id_df(), file, delim = ",")
     }
   )
 
@@ -115,10 +118,10 @@ downloadHandler(
 ### Step 2.
 
 
-Produce a dataframe with each row containing a trainee name, Scopus ID, and number of papers for each year from 1998-2021.
+Produce a dataframe with each row containing a trainee name, Scopus ID, and number of papers for each year from 2000-2023.
 
 
-The papers data come from a set of csv files downloaded from SciVal, each including data for up to 75 trainees.
+The papers data come from a set of csv files downloaded from SciVal, each including data for up to 75 trainees (a SciVal limit).
 ```{r}
 
 
@@ -148,6 +151,7 @@ DT::dataTableOutput("table")
 
 pubs1_df <- reactive({
   
+  req(input$file3)
   pubs1_df <- load_file(input$file3$datapath)
   
   pubs1_df <- rename(pubs1_df, id = ID) |> select(-"Author", -"first")
@@ -159,6 +163,7 @@ pubs1_df <- reactive({
 
 pubs2_df <- reactive({
   
+  req(input$file4)
   pubs2_df <- load_file(input$file4$datapath)
   
   pubs2_df <- rename( pubs2_df, id = ID) |> select(-"Author", -"first")
@@ -168,6 +173,7 @@ pubs2_df <- reactive({
 
 pubs3_df <- reactive({
   
+  req(input$file5)
   pubs3_df <- load_file(input$file5$datapath)
   
   pubs3_df <- rename( pubs3_df, id = ID) |> select(-"Author", -"first")
@@ -176,21 +182,23 @@ pubs3_df <- reactive({
   
 })
 
-##########.  produce a dataframe with with each row containing trainee name, Scopus ID, and number of papers for each year from 1998-2021  #########
+##########.  produce a dataframe with with each row containing trainee name, metadata, Scopus ID, and number of papers for each year from 1998-2021  #########
 
-full_pubs_df  <- reactive({
+meta_id_pubs_df  <- reactive({
   
   all_pubs_df <- union(pubs1_df(), pubs2_df()) |>  union(pubs3_df())
-  full_pubs_df <- inner_join(df12(), all_pubs_df, by = 'id')
+  meta_id_pubs_df <- inner_join(meta_id_df(), all_pubs_df, by = 'id') |>
+    mutate_if(is.numeric, funs(ifelse(is.na(.), 0, .)))
+  
 
 })
 
 
 output$table <- DT::renderDataTable(DT::datatable({
   
-    df <- full_pubs_df()
-    df
-    
+    meta_id_pubs_df_table <-  meta_id_pubs_df()
+    meta_id_pubs_df_table
+    #all_pubs_df
   }))
        
 
@@ -198,7 +206,7 @@ output$table <- DT::renderDataTable(DT::datatable({
 
 ```{r}
 
-#########. download csv file with each row containing trainee name, Scopus ID, and number of papers for each year from 1998-2021.  ###########
+#########. download csv file with each row containing trainee name, Scopus ID, and number of papers for each year from 2000-2023.  ###########
 
 
 downloadHandler(
@@ -206,7 +214,7 @@ downloadHandler(
       paste0(tools::file_path_sans_ext(input$file$name), ".csv")
     },
     content = function(file) {
-      vroom::vroom_write(full_pubs_df(), file, delim = ",")
+      vroom::vroom_write(meta_id_pubs_df(), file, delim = ",")
     }
   )
 ```

@@ -1,0 +1,136 @@
+---
+title: "SciVal data prep with widgets"
+author: "Tom Tullius"
+date: "`r Sys.Date()`"
+output: 
+  html_notebook: 
+    code_folding: hide
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+These code chunks process raw trainee data to produce a spreadsheet file (CSV format) that can be used in the SciVal Shiny dashboard app.
+
+The purpose of this code is to join an in-house-maintained file that contains various metadata for a list of trainees, with a file exported from SciVal containing data on Scholarly Output (paper numbers) for the same list of trainees.
+
+The two files are joined by trainee Scopus ID's, which must be included in each file.
+
+
+### Step 1: 
+Load a raw CSV file that was exported from SciVal with a set of trainee names, their Scopus ID's, and their Scholarly Output (numbers of papers over a range of years,  as specified in the SciVal search). 
+Headers are automatically stripped off - no pre-processing of this file is needed.
+Scholarly Output can be total papers, or first-author papers, or last/corresponding author papers, depending on the configuration of the SciVal search.
+
+### Step 2: 
+Load a CSV file containing trainee metadata. This file MUST include Scopus ID's for each trainee, to allow the Scholarly Output dataframe to be joined with the metadata dataframe. 
+Metadata can include gender, URM status, year of PhD start, year of PhD end, months in training, type of first-year fellowship, mentor name, current employer, job title, zip code of job, etc.
+
+The resulting file, which joins metadata with Scholarly Output, can be named and downloaded as a CSV file to your computer for subsequent use.
+
+```{r}
+
+library(plyr)
+library (dplyr)
+library (tidyverse)
+library(janitor)
+library(vroom)
+
+##########. function to load a SciVal- produced file from an interactive file input. 
+#######  strips out extraneous header lines and Tags column, rename id variable, 
+#######  remove extra column at end, and separate last and first names into two variables
+
+
+load_SciVal_file <- function(path) {
+  vroom::vroom(path, delim = ",", skip = 13, col_select = -...3, na = c("-", "NA")) |> 
+  dplyr::rename(id = ...2) |> 
+  select(!last_col()) 
+}
+
+######. end function      ######
+
+########## function to load a trainee metadata csv file (containing SciVal ID's) from an interactive file input #######
+
+
+load_metadata_file <- function(path) {
+  vroom::vroom(path, delim = ",", na = c("-", "NA")) |>
+    clean_names()
+}
+
+######. end function      ######
+
+
+```
+
+
+
+```{r}
+
+##########. interactive file selection. #########
+
+fileInput("file1",
+                "Choose CSV File with trainee metadata",
+                accept = ".csv"
+      )
+
+fileInput("file2",
+                "Choose SciVal CSV File with trainee names, Scopus ID's, and numbers of papers over a range of years",
+                accept = ".csv"
+      )
+
+DT::dataTableOutput("meta_table")
+
+
+############.  load csv files into dataframes.  ###########
+
+meta_df <- reactive({
+  
+  req(input$file1)
+  load_metadata_file(input$file1$datapath)
+  
+})
+
+
+SciVal_df <- reactive({
+  
+  req(input$file2)
+  load_SciVal_file(input$file2$datapath)
+  
+})
+
+###############. combine metadata file with SciVal-produced file, by Scival ID
+
+meta_id_pubs_df  <- reactive({
+  
+  meta_id_pubs_df <- inner_join(meta_df(), SciVal_df(), by = 'id') |>
+    select(!...1) |>
+    mutate_if(is.numeric, funs(ifelse(is.na(.), 0, .)))
+  
+
+})
+
+output$meta_table <- DT::renderDataTable(DT::datatable({
+  
+    meta_id_pubs_df_table <- meta_id_pubs_df()
+    meta_id_pubs_df_table
+    
+  }))
+
+
+#########. download csv file with trainee metadata joined to papers by year for each trainee.  ###########
+
+
+downloadHandler(
+    filename = function() {
+      paste0(tools::file_path_sans_ext(input$file$name), ".csv")
+    },
+    content = function(file) {
+      vroom::vroom_write(meta_id_pubs_df(), file, delim = ",")
+    }
+  )
+
+```
