@@ -53,6 +53,7 @@ load_SciVal_file <- function(path) {
 
 ######. end function      ######
 
+
 ########## function to load a trainee metadata csv file (containing SciVal ID's) from an interactive file input #######
 
 
@@ -63,6 +64,15 @@ load_metadata_file <- function(path) {
 
 ######. end function      ######
 
+
+##########. function to load a trainee metadata csv file with numbers of papers over a range of years from an interactive file input. #######
+
+
+load_file <- function(path) {
+  vroom::vroom(path, delim = ",", na = c("-", "NA"))
+}
+
+######. end function      ######
 
 ```
 
@@ -108,6 +118,8 @@ meta_id_pubs_df  <- reactive({
   
   meta_id_pubs_df <- inner_join(meta_df(), SciVal_df(), by = 'id') |>
     select(!...1) |>
+    select(!student) |>
+    select(!Overall) |>
     mutate_if(is.numeric, funs(ifelse(is.na(.), 0, .)))
   
 
@@ -134,3 +146,89 @@ downloadHandler(
   )
 
 ```
+## Introduction
+
+These code chunks combine two complete trainee metadata + papers CSV files. This is used to add a new set of trainees to an existing trainee list.
+
+The two input files are those produced by the code chunks above (steps 1 and 2).
+
+The SciVal-produced Scholarly Output file used in the code above to produce input files can include different ranges of years for the two input files. For any years that are not included in one of the files, a value of "0" is entered for the number of papers for that trainee and year. 
+
+Because SciVal queries can go back a maximum of 20 years, it is recommended that the Current Trainee file is produced with the maximum number of years available (20 years). Then, a New Trainee list can be appended without affecting paper numbers for the original trainees in early years. 
+
+### Step 1: 
+
+Load a CSV file containing the Current Trainee metadata + papers CSV file, as produced from the code above.
+
+### Step 2: 
+
+Load a CSV file containing the New Trainee metadata + papers CSV file, as produced from the code above.
+
+
+The resulting file, which combines data for Current and New Trainees, can be named and downloaded as a CSV file to your computer for subsequent use.
+
+
+```{r}
+
+
+##########. interactive file selection. #########
+
+fileInput("file3",
+                "Choose CSV File with current list of trainees with metadata and papers from 2000-2023",
+                accept = ".csv"
+      )
+
+fileInput("file4",
+                "Choose CSV File with new list of trainees with metadata and papers from 2012-2023",
+                accept = ".csv"
+      )
+
+DT::dataTableOutput("combo_table")
+
+############.  load csv files into dataframes.  ###########
+
+current_trainees_df <- reactive({
+  
+  req(input$file3)
+  current_trainees_df <- load_file(input$file3$datapath)
+  
+})
+
+
+new_trainees_df <- reactive({
+  
+  req(input$file4)
+  new_trainees_df <- load_file(input$file4$datapath)
+ 
+  
+})
+
+###############. combine current trainee file with new trainee file
+
+combo_df  <- reactive({
+  
+    combo_df <- rbind.fill(current_trainees_df(), new_trainees_df()) |>
+      mutate_if(is.numeric, list(~ifelse(is.na(.), 0, .)))
+
+})
+
+
+
+output$combo_table <- DT::renderDataTable(DT::datatable({
+  
+    combo_df_table <- combo_df()
+    combo_df_table
+
+}))
+
+downloadHandler(
+    filename = function() {
+      paste0(tools::file_path_sans_ext(input$file$name), ".csv")
+    },
+    content = function(file) {
+      vroom::vroom_write(combo_df(), file, delim = ",")
+    }
+  )
+
+```
+
